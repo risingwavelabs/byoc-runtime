@@ -1,0 +1,37 @@
+# Refer to golangci-lint's example config file for more options and information:
+# https://github.com/golangci/golangci-lint/blob/master/.golangci.reference.yml
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+  go: "1.22"
+
+staticcheck:
+  go: "1.22"
+  # https://staticcheck.io/docs/options#checks
+  checks: [ "all" ]
+
+stylecheck:
+  go: "1.22"
+
+linters-settings:
+  goimports:
+    # Put imports beginning with prefix after 3rd-party packages.
+    # It's a comma-separated list of prefixes.
+    local-prefixes: github.com/risingwavelabs/cloudagent
+
+linters:
+  enable:
+    - revive
+    - godot
+    - gofmt
+    - goimports
+    - govet
+    - staticcheck
+    - stylecheck
+    - errcheck
+    - unused
+    - gosimple
+
+issues:
+  fix: false
