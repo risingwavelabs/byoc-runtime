@@ -24,6 +24,7 @@ import (
 var (
 	stateLockErrRegexp  = regexp.MustCompile(`Error acquiring the state lock`)
 	stateLockInfoRegexp = regexp.MustCompile(`Lock Info:\n\s*ID:\s*([^\n]+)\n\s*Path:\s*([^\n]+)\n\s*Operation:\s*([^\n]+)\n\s*Who:\s*([^\n]+)\n\s*Version:\s*([^\n]+)\n\s*Created:\s*([^\n]+)\n`)
+	Test                = "1"
 )
 
 const (
