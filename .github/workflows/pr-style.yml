@@ -1,0 +1,30 @@
+name: pr-style
+
+on:
+  pull_request:
+    branches:
+      - main
+      - release-**
+    paths:
+      - '.github/workflows/pr-style.yml'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+
+jobs:
+  style-check:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
+    - uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    - name: Mod Tidy Check
+      shell: bash
+      run: make mod-tidy-check
+    - name: Lint Check
+      shell: bash
+      run: make lint

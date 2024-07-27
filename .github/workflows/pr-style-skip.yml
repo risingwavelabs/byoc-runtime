@@ -1,0 +1,17 @@
+name: pr-style
+
+on:
+  pull_request:
+    branches:
+      - main
+      - release-**
+    paths-ignore:
+      - '.github/workflows/pr-style.yml'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+jobs:
+  style-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: 'echo "always skip"'
