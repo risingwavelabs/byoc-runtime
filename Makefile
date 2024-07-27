@@ -30,7 +30,7 @@ lint-fix: check-golangci-lint ## Fix golang lint errors
 	./bin/golangci-lint run --config .golangci.yaml --fix
 
 ut:
-	COLOR=ALWAYS go test -race -covermode=atomic -coverprofile=coverage.out -tags ut ./...
+	COLOR=ALWAYS go test -race -covermode=atomic -coverprofile=coverage.out ./...
 	go tool cover -html coverage.out -o coverage.html
 
 check-diff:

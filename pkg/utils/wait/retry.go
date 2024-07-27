@@ -12,7 +12,7 @@ import (
 func RetryWithInterval(ctx context.Context, times int, interval time.Duration, do func(context.Context) error) error {
 	times = max(times, 0)
 	var err error
-	for i := 0; i < (times + 1); i++ {
+	for i := 0; i < times; i++ {
 		err = do(ctx)
 		if err == nil {
 			return nil
