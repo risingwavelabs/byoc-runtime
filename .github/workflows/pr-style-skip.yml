@@ -10,6 +10,15 @@ on:
       - 'pkg/**'
       - 'go.mod'
       - 'go.sum'
+  merge_group:
+    branches:
+      - main
+      - release-**
+    paths-ignore:
+      - '.github/workflows/pr-style.yml'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
 jobs:
   style-check:
     runs-on: ubuntu-22.04
