@@ -1,0 +1,24 @@
+name: pr-ut
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/pr-ut.yml'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+  merge_group:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/pr-ut.yml'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+jobs:
+  unit-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: 'echo "always skip"'
