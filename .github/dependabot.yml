@@ -12,7 +12,7 @@ updates:
       interval: "weekly"
       day: "sunday"
     reviewers:
-      - "risingwavelabs/byoc"
+      - "risingwavelabs/byoc-dependabot-review"
   # Maintain dependencies for Go modules
   - package-ecosystem: "gomod"
     directory: "/"
@@ -20,4 +20,4 @@ updates:
       interval: "weekly"
       day: "sunday"
     reviewers:
-      - "risingwavelabs/byoc"
+      - "risingwavelabs/byoc-dependabot-review"
