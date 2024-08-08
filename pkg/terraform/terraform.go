@@ -87,6 +87,9 @@ type ApplyOptions struct {
 	GracefulShutdownPeriod time.Duration
 	LockExpirationDuration time.Duration
 	InitOptions            TFInitOptions
+
+	StdOut io.Writer
+	StdErr io.Writer
 }
 
 func (t *Terraform) ApplyModule(ctx context.Context, moduleOptions ModuleOptions, applyOptions ApplyOptions) error {
@@ -121,6 +124,9 @@ type DestroyOptions struct {
 	GracefulShutdownPeriod time.Duration
 	LockExpirationDuration time.Duration
 	InitOptions            TFInitOptions
+
+	StdOut io.Writer
+	StdErr io.Writer
 }
 
 func (t *Terraform) DestroyModule(ctx context.Context, options ModuleOptions, destroyOptions DestroyOptions) error {
@@ -348,6 +354,9 @@ func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backe
 		return eris.Wrap(err, "failed to create Terraform exec")
 	}
 
+	tf.SetStdout(options.StdOut)
+	tf.SetStderr(options.StdErr)
+
 	err = tfInit(ctx, tf, backendPath, options.InitOptions)
 	if err != nil {
 		return eris.Wrap(err, "failed to init terraform")
@@ -377,6 +386,9 @@ func (t *Terraform) terraformInitAndDestroy(ctx context.Context, workingDir, bac
 	if err != nil {
 		return eris.Wrap(err, "failed to create Terraform exec")
 	}
+
+	tf.SetStdout(options.StdOut)
+	tf.SetStderr(options.StdErr)
 
 	err = tfInit(ctx, tf, backendPath, options.InitOptions)
 	if err != nil {
