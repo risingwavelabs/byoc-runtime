@@ -6,7 +6,7 @@ require (
 	github.com/hashicorp/go-version v1.7.0
 	github.com/hashicorp/hc-install v0.9.0
 	github.com/hashicorp/terraform-exec v0.21.0
-	github.com/risingwavelabs/eris v1.3.0
+	github.com/risingwavelabs/eris v1.3.1
 )
 
 require (

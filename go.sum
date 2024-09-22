@@ -48,8 +48,8 @@ github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWE
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/pjbgf/sha1cd v0.3.0 h1:4D5XXmUUBUl/xQ6IjCkEAbqXskkq/4O7LmGn0AqMDs4=
 github.com/pjbgf/sha1cd v0.3.0/go.mod h1:nZ1rrWOcGJ5uZgEEVL1VUM9iRQiZvWdbZjkKyFzPPsI=
-github.com/risingwavelabs/eris v1.3.0 h1:QDkr4B6gJ9LIMDfHRmd2bayYuImEy1fEClXaDJDSFik=
-github.com/risingwavelabs/eris v1.3.0/go.mod h1:T3aejJhyzuCBKyV498n0AOsgvCr/S/j7n86tnOaabrQ=
+github.com/risingwavelabs/eris v1.3.1 h1:c1F4UxAELtS8tWvONTf6M+kLH6PHjral+QY7g1U2L6U=
+github.com/risingwavelabs/eris v1.3.1/go.mod h1:T3aejJhyzuCBKyV498n0AOsgvCr/S/j7n86tnOaabrQ=
 github.com/risingwavelabs/terraform-exec v0.21.0-gracefulcancel h1:P9jgPjdSiYar72E1CcI8hk7LwLCXZxm0ioXIjcjwC3s=
 github.com/risingwavelabs/terraform-exec v0.21.0-gracefulcancel/go.mod h1:mzZH66BsYeKnA9KeAIbYkWZtutxBSWBX8MCEtdVpiO0=
 github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 h1:n661drycOFuPLCN3Uc8sB6B/s6Z4t2xvBgU1htSHuq8=
