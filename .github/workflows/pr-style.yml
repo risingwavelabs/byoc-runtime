@@ -30,7 +30,7 @@ jobs:
         ref: ${{ inputs.ref }}
     - uses: actions/setup-go@v5
       with:
-        go-version: '1.22'
+        go-version: '1.23'
     - name: Mod Tidy Check
       shell: bash
       run: make mod-tidy-check

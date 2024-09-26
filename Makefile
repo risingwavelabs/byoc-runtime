@@ -1,5 +1,5 @@
 # https://github.com/golangci/golangci-lint/releases/latest
-GOLANGCI_LINT_VERSION="1.59.1"
+GOLANGCI_LINT_VERSION="1.61.0"
 
 RED    = \033[0;31m
 GREEN  = \033[0;32m
