@@ -1,3 +1,4 @@
+// Package wait defines utils for operations that requies waiting.
 package wait
 
 import (

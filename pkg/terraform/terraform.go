@@ -1,3 +1,4 @@
+// Package terraform defines logic of how RisingWave manages BYOC terraform modules.
 package terraform
 
 import (
@@ -30,6 +31,7 @@ const (
 	lockCreatedLayout = "2006-01-02 15:04:05.999999999 -0700 MST"
 )
 
+// Terraform wraps BYOC terraform management logics.
 type Terraform struct {
 	// ModulePath is the relative path of the file storing TF version to the workspace root path
 	tfVersionFilePath string
@@ -39,6 +41,7 @@ type Terraform struct {
 	packageName       string
 }
 
+// NewTerraformOptions contains all options for Terraform initialization.
 type NewTerraformOptions struct {
 	RootPath          string
 	TFVersionFilePath string
@@ -46,6 +49,7 @@ type NewTerraformOptions struct {
 	PackageDestName   string
 }
 
+// New initilizes a new Terraform.
 func New(ctx context.Context, options NewTerraformOptions) (*Terraform, error) {
 	t := &Terraform{
 		tfVersionFilePath: options.TFVersionFilePath,
@@ -59,6 +63,7 @@ func New(ctx context.Context, options NewTerraformOptions) (*Terraform, error) {
 	return t, nil
 }
 
+// Clean cleans up all Terraform temp artifacts.
 func (t *Terraform) Clean(_ context.Context) error {
 	err := os.RemoveAll(t.rootPath)
 	if err != nil {
@@ -67,6 +72,7 @@ func (t *Terraform) Clean(_ context.Context) error {
 	return nil
 }
 
+// ModuleOptions contains all options for Terraform module operations.
 type ModuleOptions struct {
 	// ModulePath is the relative path of the module to the workspace root path
 	ModulePath            string
@@ -79,11 +85,13 @@ type ModuleOptions struct {
 	VariablePayload    []byte
 }
 
+// TFInitOptions lists all options for `terraform init`.
 type TFInitOptions struct {
 	Retry         int
 	RetryInterval time.Duration
 }
 
+// ApplyOptions lists all options for `terraform apply`.
 type ApplyOptions struct {
 	Retry                  int
 	RetryInterval          time.Duration
@@ -95,6 +103,7 @@ type ApplyOptions struct {
 	StdErr io.Writer
 }
 
+// ApplyModule applies a Terraform module.
 func (t *Terraform) ApplyModule(ctx context.Context, moduleOptions ModuleOptions, applyOptions ApplyOptions) error {
 	absModulePath := fmt.Sprintf("%s/%s", t.rootPath, moduleOptions.ModulePath)
 	backendCfgPath := fmt.Sprintf("%s/%s", absModulePath, moduleOptions.BackendConfigFileName)
@@ -122,6 +131,7 @@ func (t *Terraform) ApplyModule(ctx context.Context, moduleOptions ModuleOptions
 	return nil
 }
 
+// DestroyOptions lists all options for `terraform destroy`.
 type DestroyOptions struct {
 	Retry                  int
 	RetryInterval          time.Duration
@@ -133,6 +143,7 @@ type DestroyOptions struct {
 	StdErr io.Writer
 }
 
+// DestroyModule destroys a Terraform module.
 func (t *Terraform) DestroyModule(ctx context.Context, moduleOptions ModuleOptions, destroyOptions DestroyOptions) error {
 	absModulePath := fmt.Sprintf("%s/%s", t.rootPath, moduleOptions.ModulePath)
 	backendCfgPath := fmt.Sprintf("%s/%s", absModulePath, moduleOptions.BackendConfigFileName)
@@ -160,12 +171,14 @@ func (t *Terraform) DestroyModule(ctx context.Context, moduleOptions ModuleOptio
 	return nil
 }
 
+// OutputOptions defines options for `terraform output` command.
 type OutputOptions struct {
 	Retry         int
 	RetryInterval time.Duration
 	InitOptions   TFInitOptions
 }
 
+// RetrieveModuleOutput reads the output from a Terraform module.
 func (t *Terraform) RetrieveModuleOutput(ctx context.Context, outputKey string, moduleOptions ModuleOptions, outputOptions OutputOptions) (json.RawMessage, error) {
 	absModulePath := fmt.Sprintf("%s/%s", t.rootPath, moduleOptions.ModulePath)
 	backendCfgPath := fmt.Sprintf("%s/%s", absModulePath, moduleOptions.BackendConfigFileName)
@@ -193,6 +206,7 @@ func (t *Terraform) RetrieveModuleOutput(ctx context.Context, outputKey string, 
 	return rawOutput.Value, nil
 }
 
+// RetrieveModuleOutputOrNil reads the output from a Terraform module if it has one.
 func (t *Terraform) RetrieveModuleOutputOrNil(ctx context.Context, outputKey string, options ModuleOptions, outputOptions OutputOptions) (json.RawMessage, error) {
 	absModulePath := fmt.Sprintf("%s/%s", t.rootPath, options.ModulePath)
 	backendCfgPath := fmt.Sprintf("%s/%s", absModulePath, options.BackendConfigFileName)
@@ -269,13 +283,13 @@ func downloadFile(url, destination string) error {
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	outFile, err := os.Create(destination)
 	if err != nil {
 		return err
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	_, err = io.Copy(outFile, response.Body)
 	return err
@@ -286,7 +300,7 @@ func unzipFile(zipFile, destination string) error {
 	if err != nil {
 		return err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	for _, file := range reader.File {
 		filePath := destination + "/" + file.Name
@@ -301,13 +315,13 @@ func unzipFile(zipFile, destination string) error {
 			if err != nil {
 				return err
 			}
-			defer inFile.Close()
+			defer func() { _ = inFile.Close() }()
 
 			outFile, err := os.Create(filePath)
 			if err != nil {
 				return err
 			}
-			defer outFile.Close()
+			defer func() { _ = outFile.Close() }()
 
 			_, err = io.Copy(outFile, inFile)
 			if err != nil {
@@ -469,6 +483,7 @@ func tfInit(ctx context.Context, tf *tfexec.Terraform, backendPath string, optio
 	return wait.RetryWithInterval(ctx, options.Retry, options.RetryInterval, init)
 }
 
+// LockErrInfo represents the metadata of a Terraform lock.
 type LockErrInfo struct {
 	ID        string
 	Path      string
