@@ -24,13 +24,23 @@ linters-settings:
 
 linters:
   enable:
-    - revive
+    - bodyclose
+    - errcheck
+    - exhaustive
+    - exptostd
+    - gocritic
     - godot
     - govet
+    - musttag
+    - noctx
+    - protogetter
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
     - staticcheck
-    - errcheck
     - unused
-    - bodyclose
+    - usestdlibvars
+    - whitespace
 
 formatters:
   enable:

@@ -246,7 +246,7 @@ func (t *Terraform) initialize(ctx context.Context) error {
 	if err != nil {
 		return eris.Wrap(err, "failed to create byoc directory")
 	}
-	err = t.prepareTerraformPackage()
+	err = t.prepareTerraformPackage(ctx)
 	if err != nil {
 		return eris.Wrap(err, "failed to prepare the tf files")
 	}
@@ -263,10 +263,10 @@ func (t *Terraform) initialize(ctx context.Context) error {
 	return nil
 }
 
-func (t *Terraform) prepareTerraformPackage() error {
+func (t *Terraform) prepareTerraformPackage(ctx context.Context) error {
 	// will download the file from the remote.
 	packagePath := fmt.Sprintf("%s/%s", t.rootPath, t.packageName)
-	if err := downloadFile(t.packageURL, packagePath); err != nil {
+	if err := downloadFile(ctx, t.packageURL, packagePath); err != nil {
 		return eris.Wrap(err, "failed to download Terraform modules")
 	}
 	if err := unzipFile(packagePath, t.rootPath); err != nil {
@@ -278,8 +278,12 @@ func (t *Terraform) prepareTerraformPackage() error {
 	return nil
 }
 
-func downloadFile(url, destination string) error {
-	response, err := http.Get(url)
+func downloadFile(ctx context.Context, url, destination string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}

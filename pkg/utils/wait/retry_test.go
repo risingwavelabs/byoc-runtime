@@ -9,7 +9,7 @@ import (
 func doSuccessOnNth(n int) func(context.Context) error {
 	count := 0
 	return func(context.Context) error {
-		count = count + 1
+		count++
 		if count == n {
 			return nil
 		}
