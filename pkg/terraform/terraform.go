@@ -29,6 +29,8 @@ var (
 
 const (
 	lockCreatedLayout = "2006-01-02 15:04:05.999999999 -0700 MST"
+
+	tfCLIConfigFileEnvKey = "TF_CLI_CONFIG_FILE"
 )
 
 // Terraform wraps BYOC terraform management logics.
@@ -86,6 +88,9 @@ type ModuleOptions struct {
 	SensitiveVariables map[string]string
 	VariableFileName   string
 	VariablePayload    []byte
+
+	CLIConfigFileName string
+	CLIConfigPayload  []byte
 }
 
 // TFInitOptions lists all options for `terraform init`.
@@ -106,25 +111,43 @@ type ApplyOptions struct {
 	StdErr io.Writer
 }
 
-// ApplyModule applies a Terraform module.
-func (t *Terraform) ApplyModule(ctx context.Context, moduleOptions ModuleOptions, applyOptions ApplyOptions) error {
-	absModulePath := fmt.Sprintf("%s/%s", t.rootPath, moduleOptions.ModulePath)
-	backendCfgPath := fmt.Sprintf("%s/%s", absModulePath, moduleOptions.BackendConfigFileName)
-	err := os.WriteFile(backendCfgPath, []byte(moduleOptions.BackendConfig), 0666)
+func (t *Terraform) setUpModule(moduleOptions ModuleOptions) (absModulePath, backendCfgPath, variablePath, cliConfigPath string, err error) {
+	absModulePath = fmt.Sprintf("%s/%s", t.rootPath, moduleOptions.ModulePath)
+	backendCfgPath = fmt.Sprintf("%s/%s", absModulePath, moduleOptions.BackendConfigFileName)
+	err = os.WriteFile(backendCfgPath, []byte(moduleOptions.BackendConfig), 0666)
 	if err != nil {
-		return eris.Wrapf(err, "failed to write tf backend config to %v", backendCfgPath)
+		return "", "", "", "", eris.Wrapf(err, "failed to write tf backend config to %v", backendCfgPath)
 	}
 
-	variablePath := fmt.Sprintf("%s/%s", absModulePath, moduleOptions.VariableFileName)
+	variablePath = fmt.Sprintf("%s/%s", absModulePath, moduleOptions.VariableFileName)
 	err = os.WriteFile(variablePath, []byte(moduleOptions.VariablePayload), 0666)
 	if err != nil {
-		return eris.Wrapf(err, "failed to write tf variable payloads to %v", variablePath)
+		return "", "", "", "", eris.Wrapf(err, "failed to write tf variable payloads to %v", variablePath)
+	}
+
+	cliConfigPath = ""
+	if moduleOptions.CLIConfigPayload != nil && moduleOptions.CLIConfigFileName != "" {
+		cliConfigPath = fmt.Sprintf("%s/%s", absModulePath, moduleOptions.CLIConfigFileName)
+		err = os.WriteFile(cliConfigPath, []byte(moduleOptions.CLIConfigPayload), 0666)
+		if err != nil {
+			return "", "", "", "", eris.Wrapf(err, "failed to write tf cli config payloads to %v", cliConfigPath)
+		}
+	}
+	return absModulePath, backendCfgPath, variablePath, cliConfigPath, nil
+}
+
+// ApplyModule applies a Terraform module.
+func (t *Terraform) ApplyModule(ctx context.Context, moduleOptions ModuleOptions, applyOptions ApplyOptions) error {
+	absModulePath, backendCfgPath, _, cliConfigPath, err := t.setUpModule(moduleOptions)
+	if err != nil {
+		return eris.Wrap(err, "error setting up the module")
 	}
 
 	err = t.terraformInitAndApply(
 		ctx,
 		absModulePath,
 		backendCfgPath,
+		cliConfigPath,
 		moduleOptions.SensitiveVariables,
 		applyOptions,
 	)
@@ -148,23 +171,16 @@ type DestroyOptions struct {
 
 // DestroyModule destroys a Terraform module.
 func (t *Terraform) DestroyModule(ctx context.Context, moduleOptions ModuleOptions, destroyOptions DestroyOptions) error {
-	absModulePath := fmt.Sprintf("%s/%s", t.rootPath, moduleOptions.ModulePath)
-	backendCfgPath := fmt.Sprintf("%s/%s", absModulePath, moduleOptions.BackendConfigFileName)
-	err := os.WriteFile(backendCfgPath, []byte(moduleOptions.BackendConfig), 0666)
+	absModulePath, backendCfgPath, _, cliConfigPath, err := t.setUpModule(moduleOptions)
 	if err != nil {
-		return eris.Wrapf(err, "failed to write tf backend config to %v", backendCfgPath)
-	}
-
-	variablePath := fmt.Sprintf("%s/%s", absModulePath, moduleOptions.VariableFileName)
-	err = os.WriteFile(variablePath, []byte(moduleOptions.VariablePayload), 0666)
-	if err != nil {
-		return eris.Wrapf(err, "failed to write tf variable payloads to %v", variablePath)
+		return eris.Wrap(err, "error setting up the module")
 	}
 
 	err = t.terraformInitAndDestroy(
 		ctx,
 		absModulePath,
 		backendCfgPath,
+		cliConfigPath,
 		moduleOptions.SensitiveVariables,
 		destroyOptions,
 	)
@@ -183,22 +199,15 @@ type OutputOptions struct {
 
 // RetrieveModuleOutput reads the output from a Terraform module.
 func (t *Terraform) RetrieveModuleOutput(ctx context.Context, outputKey string, moduleOptions ModuleOptions, outputOptions OutputOptions) (json.RawMessage, error) {
-	absModulePath := fmt.Sprintf("%s/%s", t.rootPath, moduleOptions.ModulePath)
-	backendCfgPath := fmt.Sprintf("%s/%s", absModulePath, moduleOptions.BackendConfigFileName)
-	err := os.WriteFile(backendCfgPath, []byte(moduleOptions.BackendConfig), 0666)
+	absModulePath, backendCfgPath, _, cliConfigPath, err := t.setUpModule(moduleOptions)
 	if err != nil {
-		return nil, eris.Wrapf(err, "failed to write tf backend config to %v", backendCfgPath)
-	}
-
-	variablePath := fmt.Sprintf("%s/%s", absModulePath, moduleOptions.VariableFileName)
-	err = os.WriteFile(variablePath, []byte(moduleOptions.VariablePayload), 0666)
-	if err != nil {
-		return nil, eris.Wrapf(err, "failed to write tf variable payloads to %v", variablePath)
+		return nil, eris.Wrap(err, "error setting up the module")
 	}
 	rawOutput, err := t.terraformInitAndOutput(
 		ctx,
 		absModulePath,
 		backendCfgPath,
+		cliConfigPath,
 		outputKey,
 		false,
 		outputOptions,
@@ -210,23 +219,16 @@ func (t *Terraform) RetrieveModuleOutput(ctx context.Context, outputKey string, 
 }
 
 // RetrieveModuleOutputOrNil reads the output from a Terraform module if it has one.
-func (t *Terraform) RetrieveModuleOutputOrNil(ctx context.Context, outputKey string, options ModuleOptions, outputOptions OutputOptions) (json.RawMessage, error) {
-	absModulePath := fmt.Sprintf("%s/%s", t.rootPath, options.ModulePath)
-	backendCfgPath := fmt.Sprintf("%s/%s", absModulePath, options.BackendConfigFileName)
-	err := os.WriteFile(backendCfgPath, []byte(options.BackendConfig), 0666)
+func (t *Terraform) RetrieveModuleOutputOrNil(ctx context.Context, outputKey string, moduleOptions ModuleOptions, outputOptions OutputOptions) (json.RawMessage, error) {
+	absModulePath, backendCfgPath, _, cliConfigPath, err := t.setUpModule(moduleOptions)
 	if err != nil {
-		return nil, eris.Wrapf(err, "failed to write tf backend config to %v", backendCfgPath)
-	}
-
-	variablePath := fmt.Sprintf("%s/%s", absModulePath, options.VariableFileName)
-	err = os.WriteFile(variablePath, []byte(options.VariablePayload), 0666)
-	if err != nil {
-		return nil, eris.Wrapf(err, "failed to write tf variable payloads to %v", variablePath)
+		return nil, eris.Wrap(err, "error setting up the module")
 	}
 	rawOutput, err := t.terraformInitAndOutput(
 		ctx,
 		absModulePath,
 		backendCfgPath,
+		cliConfigPath,
 		outputKey,
 		true,
 		outputOptions,
@@ -375,7 +377,7 @@ func (t *Terraform) getTerraformExec(workingDir string) (*tfexec.Terraform, erro
 	return tf, nil
 }
 
-func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backendPath string, sensitiveVariables map[string]string, options ApplyOptions) error {
+func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backendPath, cliConfigPath string, sensitiveVariables map[string]string, options ApplyOptions) error {
 	tf, err := t.getTerraformExec(workingDir)
 	if err != nil {
 		return eris.Wrap(err, "failed to create Terraform exec")
@@ -384,7 +386,7 @@ func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backe
 	tf.SetStdout(options.StdOut)
 	tf.SetStderr(options.StdErr)
 
-	err = tfInit(ctx, tf, backendPath, options.InitOptions)
+	err = tfInit(ctx, tf, backendPath, cliConfigPath, options.InitOptions)
 	if err != nil {
 		return eris.Wrap(err, "failed to init terraform")
 	}
@@ -415,7 +417,7 @@ func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backe
 	return nil
 }
 
-func (t *Terraform) terraformInitAndDestroy(ctx context.Context, workingDir, backendPath string, sensitiveVariables map[string]string, options DestroyOptions) error {
+func (t *Terraform) terraformInitAndDestroy(ctx context.Context, workingDir, backendPath, cliConfigPath string, sensitiveVariables map[string]string, options DestroyOptions) error {
 	tf, err := t.getTerraformExec(workingDir)
 	if err != nil {
 		return eris.Wrap(err, "failed to create Terraform exec")
@@ -424,7 +426,7 @@ func (t *Terraform) terraformInitAndDestroy(ctx context.Context, workingDir, bac
 	tf.SetStdout(options.StdOut)
 	tf.SetStderr(options.StdErr)
 
-	err = tfInit(ctx, tf, backendPath, options.InitOptions)
+	err = tfInit(ctx, tf, backendPath, cliConfigPath, options.InitOptions)
 	if err != nil {
 		return eris.Wrap(err, "failed to init terraform")
 	}
@@ -455,16 +457,17 @@ func (t *Terraform) terraformInitAndDestroy(ctx context.Context, workingDir, bac
 	return nil
 }
 
-func (t *Terraform) terraformInitAndOutput(ctx context.Context, workingDir, backendPath, outputKey string, ignoreEmptyOutput bool, options OutputOptions) (*tfexec.OutputMeta, error) {
+func (t *Terraform) terraformInitAndOutput(ctx context.Context, workingDir, backendPath, cliConfigPath, outputKey string, ignoreEmptyOutput bool, options OutputOptions) (*tfexec.OutputMeta, error) {
 	tf, err := t.getTerraformExec(workingDir)
 	if err != nil {
 		return nil, eris.Wrap(err, "failed to create Terraform exec")
 	}
 
-	err = tfInit(ctx, tf, backendPath, options.InitOptions)
+	err = tfInit(ctx, tf, backendPath, cliConfigPath, options.InitOptions)
 	if err != nil {
 		return nil, eris.Wrap(err, "failed to init terraform")
 	}
+
 	var output map[string]tfexec.OutputMeta
 	doOutput := func(ctx context.Context) error {
 		output, err = tf.Output(ctx)
@@ -484,7 +487,13 @@ func (t *Terraform) terraformInitAndOutput(ctx context.Context, workingDir, back
 	return &outputMeta, nil
 }
 
-func tfInit(ctx context.Context, tf *tfexec.Terraform, backendPath string, options TFInitOptions) error {
+func tfInit(ctx context.Context, tf *tfexec.Terraform, backendPath, cliConfigPath string, options TFInitOptions) error {
+	if cliConfigPath != "" {
+		err := os.Setenv(tfCLIConfigFileEnvKey, cliConfigPath)
+		if err != nil {
+			return eris.Wrap(err, "failed to set up CLI config file env var")
+		}
+	}
 	init := func(ctx context.Context) error {
 		return tf.Init(ctx, tfexec.Upgrade(true), tfexec.BackendConfig(backendPath))
 	}
