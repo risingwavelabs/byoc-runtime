@@ -34,28 +34,31 @@ const (
 // Terraform wraps BYOC terraform management logics.
 type Terraform struct {
 	// ModulePath is the relative path of the file storing TF version to the workspace root path
-	tfVersionFilePath string
-	tfExecPath        string
-	rootPath          string
-	packageURL        string
-	packageName       string
+	tfVersionFilePath      string
+	tfExecPath             string
+	rootPath               string
+	packageURL             string
+	packageName            string
+	privateTFBinaryBaseURL string // If empty, use the default public endpoint to download TF binary.
 }
 
 // NewTerraformOptions contains all options for Terraform initialization.
 type NewTerraformOptions struct {
-	RootPath          string
-	TFVersionFilePath string
-	PackageURL        string
-	PackageDestName   string
+	RootPath               string
+	TFVersionFilePath      string
+	PackageURL             string
+	PackageDestName        string
+	PrivateTFBinaryBaseURL string
 }
 
 // New initilizes a new Terraform.
 func New(ctx context.Context, options NewTerraformOptions) (*Terraform, error) {
 	t := &Terraform{
-		tfVersionFilePath: options.TFVersionFilePath,
-		rootPath:          options.RootPath,
-		packageURL:        options.PackageURL,
-		packageName:       options.PackageDestName,
+		tfVersionFilePath:      options.TFVersionFilePath,
+		rootPath:               options.RootPath,
+		packageURL:             options.PackageURL,
+		packageName:            options.PackageDestName,
+		privateTFBinaryBaseURL: options.PrivateTFBinaryBaseURL,
 	}
 	if err := t.initialize(ctx); err != nil {
 		return nil, eris.Wrapf(err, "failed to initialize terraform")
@@ -255,7 +258,7 @@ func (t *Terraform) initialize(ctx context.Context) error {
 	if err != nil {
 		return eris.Wrap(err, "invalid terraform version in module package")
 	}
-	tfExecPath, err := installTerraform(ctx, t.rootPath, tfVersion)
+	tfExecPath, err := installTerraform(ctx, t.rootPath, tfVersion, t.privateTFBinaryBaseURL)
 	if err != nil {
 		return eris.Wrapf(err, "failed to initialize Terraform, version: %v", tfVersion)
 	}
@@ -345,7 +348,7 @@ func readTerraformVersion(path string) (string, error) {
 	return strings.TrimSpace(string(versionRaw)), nil
 }
 
-func installTerraform(ctx context.Context, dir, tfVersion string) (string, error) {
+func installTerraform(ctx context.Context, dir, tfVersion, privateTFBinaryBaseURL string) (string, error) {
 	version, err := version.NewVersion(tfVersion)
 	if err != nil {
 		return "", eris.Wrapf(err, "failed to get terraform version %v", tfVersion)
@@ -354,6 +357,7 @@ func installTerraform(ctx context.Context, dir, tfVersion string) (string, error
 		Product:    product.Terraform,
 		Version:    version,
 		InstallDir: dir,
+		ApiBaseURL: privateTFBinaryBaseURL,
 	}
 
 	execPath, err := installer.Install(ctx)
