@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/risingwavelabs/eris"
 
+	"github.com/risingwavelabs/byoc-runtime/pkg/module"
 	"github.com/risingwavelabs/byoc-runtime/pkg/utils/wait"
 )
 
@@ -36,31 +37,34 @@ const (
 // Terraform wraps BYOC terraform management logics.
 type Terraform struct {
 	// ModulePath is the relative path of the file storing TF version to the workspace root path
-	tfVersionFilePath      string
-	tfExecPath             string
-	rootPath               string
-	packageURL             string
-	packageName            string
-	privateTFBinaryBaseURL string // If empty, use the default public endpoint to download TF binary.
+	tfVersionFilePath            string
+	tfExecPath                   string
+	rootPath                     string
+	packageURL                   string
+	packageName                  string
+	privateTFBinaryBaseURL       string // If empty, use the default public endpoint to download TF binary.
+	customModuleRegistryEndpoint string // If empty, use the default hashicorp endpoint to download 3rd party modules.
 }
 
 // NewTerraformOptions contains all options for Terraform initialization.
 type NewTerraformOptions struct {
-	RootPath               string
-	TFVersionFilePath      string
-	PackageURL             string
-	PackageDestName        string
-	PrivateTFBinaryBaseURL string
+	RootPath                     string
+	TFVersionFilePath            string
+	PackageURL                   string
+	PackageDestName              string
+	PrivateTFBinaryBaseURL       string
+	CustomModuleRegistryEndpoint string
 }
 
 // New initilizes a new Terraform.
 func New(ctx context.Context, options NewTerraformOptions) (*Terraform, error) {
 	t := &Terraform{
-		tfVersionFilePath:      options.TFVersionFilePath,
-		rootPath:               options.RootPath,
-		packageURL:             options.PackageURL,
-		packageName:            options.PackageDestName,
-		privateTFBinaryBaseURL: options.PrivateTFBinaryBaseURL,
+		tfVersionFilePath:            options.TFVersionFilePath,
+		rootPath:                     options.RootPath,
+		packageURL:                   options.PackageURL,
+		packageName:                  options.PackageDestName,
+		privateTFBinaryBaseURL:       options.PrivateTFBinaryBaseURL,
+		customModuleRegistryEndpoint: options.CustomModuleRegistryEndpoint,
 	}
 	if err := t.initialize(ctx); err != nil {
 		return nil, eris.Wrapf(err, "failed to initialize terraform")
@@ -279,6 +283,12 @@ func (t *Terraform) prepareTerraformPackage(ctx context.Context) error {
 	}
 	if err := os.Remove(packagePath); err != nil {
 		return eris.Wrap(err, "failed to clean up Terraform modules zip")
+	}
+
+	if t.customModuleRegistryEndpoint != "" {
+		if err := module.InjectCustomModuleRegistry(t.rootPath, t.customModuleRegistryEndpoint); err != nil {
+			return eris.Wrapf(err, "failed to inject custom module registry %s to TF package files", t.customModuleRegistryEndpoint)
+		}
 	}
 	return nil
 }
