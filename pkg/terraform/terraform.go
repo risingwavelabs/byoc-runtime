@@ -395,18 +395,16 @@ func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backe
 
 	tf.SetStdout(options.StdOut)
 	tf.SetStderr(options.StdErr)
+	if err := tf.SetWaitDelay(options.GracefulShutdownPeriod); err != nil {
+		return eris.Wrap(err, "failed to set graceful shutdown period")
+	}
 
 	err = tfInit(ctx, tf, backendPath, cliConfigPath, options.InitOptions)
 	if err != nil {
 		return eris.Wrap(err, "failed to init terraform")
 	}
 
-	tfexecApplyOptions := []tfexec.ApplyOption{
-		tfexec.GracefulShutdown(tfexec.GracefulShutdownConfig{
-			Enable: true,
-			Period: options.GracefulShutdownPeriod,
-		}),
-	}
+	var tfexecApplyOptions []tfexec.ApplyOption
 	for _, assignment := range toVariableAssignments(sensitiveVariables) {
 		tfexecApplyOptions = append(tfexecApplyOptions, tfexec.Var(assignment))
 	}
@@ -435,18 +433,16 @@ func (t *Terraform) terraformInitAndDestroy(ctx context.Context, workingDir, bac
 
 	tf.SetStdout(options.StdOut)
 	tf.SetStderr(options.StdErr)
+	if err := tf.SetWaitDelay(options.GracefulShutdownPeriod); err != nil {
+		return eris.Wrap(err, "failed to set graceful shutdown period")
+	}
 
 	err = tfInit(ctx, tf, backendPath, cliConfigPath, options.InitOptions)
 	if err != nil {
 		return eris.Wrap(err, "failed to init terraform")
 	}
 
-	tfexecDestroyOptions := []tfexec.DestroyOption{
-		tfexec.GracefulShutdown(tfexec.GracefulShutdownConfig{
-			Enable: true,
-			Period: options.GracefulShutdownPeriod,
-		}),
-	}
+	var tfexecDestroyOptions []tfexec.DestroyOption
 	for _, assignment := range toVariableAssignments(sensitiveVariables) {
 		tfexecDestroyOptions = append(tfexecDestroyOptions, tfexec.Var(assignment))
 	}
