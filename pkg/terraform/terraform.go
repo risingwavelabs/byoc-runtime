@@ -44,6 +44,11 @@ type Terraform struct {
 	packageName                  string
 	privateTFBinaryBaseURL       string // If empty, use the default public endpoint to download TF binary.
 	customModuleRegistryEndpoint string // If empty, use the default hashicorp endpoint to download 3rd party modules.
+
+	// Injected dependencies for testing
+	tfExecutorFactory ExecutorFactory
+	tfInstaller       Installer
+	httpClient        HTTPClient
 }
 
 // NewTerraformOptions contains all options for Terraform initialization.
@@ -54,10 +59,29 @@ type NewTerraformOptions struct {
 	PackageDestName              string
 	PrivateTFBinaryBaseURL       string
 	CustomModuleRegistryEndpoint string
+
+	// Optional dependencies for testing (if nil, defaults are used)
+	TFExecutorFactory ExecutorFactory
+	TFInstaller       Installer
+	HTTPClient        HTTPClient
 }
 
 // New initilizes a new Terraform.
 func New(ctx context.Context, options NewTerraformOptions) (*Terraform, error) {
+	// Set default implementations if not provided
+	tfExecutorFactory := options.TFExecutorFactory
+	if tfExecutorFactory == nil {
+		tfExecutorFactory = &defaultExecutorFactory{}
+	}
+	tfInstaller := options.TFInstaller
+	if tfInstaller == nil {
+		tfInstaller = &defaultInstaller{}
+	}
+	httpClient := options.HTTPClient
+	if httpClient == nil {
+		httpClient = &defaultHTTPClient{}
+	}
+
 	t := &Terraform{
 		tfVersionFilePath:            options.TFVersionFilePath,
 		rootPath:                     options.RootPath,
@@ -65,6 +89,9 @@ func New(ctx context.Context, options NewTerraformOptions) (*Terraform, error) {
 		packageName:                  options.PackageDestName,
 		privateTFBinaryBaseURL:       options.PrivateTFBinaryBaseURL,
 		customModuleRegistryEndpoint: options.CustomModuleRegistryEndpoint,
+		tfExecutorFactory:            tfExecutorFactory,
+		tfInstaller:                  tfInstaller,
+		httpClient:                   httpClient,
 	}
 	if err := t.initialize(ctx); err != nil {
 		return nil, eris.Wrapf(err, "failed to initialize terraform")
@@ -264,7 +291,7 @@ func (t *Terraform) initialize(ctx context.Context) error {
 	if err != nil {
 		return eris.Wrap(err, "invalid terraform version in module package")
 	}
-	tfExecPath, err := installTerraform(ctx, t.rootPath, tfVersion, t.privateTFBinaryBaseURL)
+	tfExecPath, err := t.tfInstaller.Install(ctx, t.rootPath, tfVersion, t.privateTFBinaryBaseURL)
 	if err != nil {
 		return eris.Wrapf(err, "failed to initialize Terraform, version: %v", tfVersion)
 	}
@@ -275,7 +302,7 @@ func (t *Terraform) initialize(ctx context.Context) error {
 func (t *Terraform) prepareTerraformPackage(ctx context.Context) error {
 	// will download the file from the remote.
 	packagePath := fmt.Sprintf("%s/%s", t.rootPath, t.packageName)
-	if err := downloadFile(ctx, t.packageURL, packagePath); err != nil {
+	if err := t.downloadFile(ctx, t.packageURL, packagePath); err != nil {
 		return eris.Wrap(err, "failed to download Terraform modules")
 	}
 	if err := unzipFile(packagePath, t.rootPath); err != nil {
@@ -293,12 +320,12 @@ func (t *Terraform) prepareTerraformPackage(ctx context.Context) error {
 	return nil
 }
 
-func downloadFile(ctx context.Context, url, destination string) error {
+func (t *Terraform) downloadFile(ctx context.Context, url, destination string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
-	response, err := http.DefaultClient.Do(req)
+	response, err := t.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -360,14 +387,14 @@ func readTerraformVersion(path string) (string, error) {
 	return strings.TrimSpace(string(versionRaw)), nil
 }
 
-func installTerraform(ctx context.Context, dir, tfVersion, privateTFBinaryBaseURL string) (string, error) {
-	version, err := version.NewVersion(tfVersion)
+func defaultInstallTerraform(ctx context.Context, dir, tfVersion, privateTFBinaryBaseURL string) (string, error) {
+	ver, err := version.NewVersion(tfVersion)
 	if err != nil {
 		return "", eris.Wrapf(err, "failed to get terraform version %v", tfVersion)
 	}
 	installer := &releases.ExactVersion{
 		Product:    product.Terraform,
-		Version:    version,
+		Version:    ver,
 		InstallDir: dir,
 		ApiBaseURL: privateTFBinaryBaseURL,
 	}
@@ -379,12 +406,8 @@ func installTerraform(ctx context.Context, dir, tfVersion, privateTFBinaryBaseUR
 	return execPath, nil
 }
 
-func (t *Terraform) getTerraformExec(workingDir string) (*tfexec.Terraform, error) {
-	tf, err := tfexec.NewTerraform(workingDir, t.tfExecPath)
-	if err != nil {
-		return nil, err
-	}
-	return tf, nil
+func (t *Terraform) getTerraformExec(workingDir string) (Executor, error) {
+	return t.tfExecutorFactory.NewTerraform(workingDir, t.tfExecPath)
 }
 
 func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backendPath, cliConfigPath string, sensitiveVariables map[string]string, options ApplyOptions) error {
@@ -493,7 +516,7 @@ func (t *Terraform) terraformInitAndOutput(ctx context.Context, workingDir, back
 	return &outputMeta, nil
 }
 
-func tfInit(ctx context.Context, tf *tfexec.Terraform, backendPath, cliConfigPath string, options TFInitOptions) error {
+func tfInit(ctx context.Context, tf Executor, backendPath, cliConfigPath string, options TFInitOptions) error {
 	if cliConfigPath != "" {
 		err := os.Setenv(tfCLIConfigFileEnvKey, cliConfigPath)
 		if err != nil {
