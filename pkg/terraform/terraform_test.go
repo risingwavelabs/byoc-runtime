@@ -22,14 +22,15 @@ import (
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupMocks  func(ctrl *gomock.Controller, tempDir string) (*MockHTTPClient, *MockInstaller)
+		setupMocks  func(ctrl *gomock.Controller, tempDir string, tfVersion string) (*MockHTTPClient, *MockInstaller)
 		tfVersion   string
 		wantErr     bool
 		errContains string
 	}{
 		{
-			name: "successful initialization",
-			setupMocks: func(ctrl *gomock.Controller, _ string) (*MockHTTPClient, *MockInstaller) {
+			name:      "successful initialization",
+			tfVersion: "1.5.0",
+			setupMocks: func(ctrl *gomock.Controller, _ string, tfVersion string) (*MockHTTPClient, *MockInstaller) {
 				httpClient := NewMockHTTPClient(ctrl)
 				installer := NewMockInstaller(ctrl)
 
@@ -37,20 +38,19 @@ func TestNew(t *testing.T) {
 				httpClient.EXPECT().Do(gomock.Any()).DoAndReturn(func(_ *http.Request) (*http.Response, error) {
 					return &http.Response{
 						StatusCode: http.StatusOK,
-						Body:       io.NopCloser(bytes.NewReader(createTestZip(t, "1.5.0"))),
+						Body:       io.NopCloser(bytes.NewReader(createTestZip(t, tfVersion))),
 					}, nil
 				})
 
-				installer.EXPECT().Install(gomock.Any(), gomock.Any(), "1.5.0", "").Return("/path/to/terraform", nil)
+				installer.EXPECT().Install(gomock.Any(), gomock.Any(), tfVersion, "").Return("/path/to/terraform", nil)
 
 				return httpClient, installer
 			},
-			tfVersion: "1.5.0",
-			wantErr:   false,
+			wantErr: false,
 		},
 		{
 			name: "download failure",
-			setupMocks: func(ctrl *gomock.Controller, _ string) (*MockHTTPClient, *MockInstaller) {
+			setupMocks: func(ctrl *gomock.Controller, _ string, tfVersion string) (*MockHTTPClient, *MockInstaller) {
 				httpClient := NewMockHTTPClient(ctrl)
 				installer := NewMockInstaller(ctrl)
 
@@ -62,23 +62,23 @@ func TestNew(t *testing.T) {
 			errContains: "failed to download",
 		},
 		{
-			name: "terraform install failure",
-			setupMocks: func(ctrl *gomock.Controller, _ string) (*MockHTTPClient, *MockInstaller) {
+			name:      "terraform install failure",
+			tfVersion: "1.5.0",
+			setupMocks: func(ctrl *gomock.Controller, _ string, tfVersion string) (*MockHTTPClient, *MockInstaller) {
 				httpClient := NewMockHTTPClient(ctrl)
 				installer := NewMockInstaller(ctrl)
 
 				httpClient.EXPECT().Do(gomock.Any()).DoAndReturn(func(_ *http.Request) (*http.Response, error) {
 					return &http.Response{
 						StatusCode: http.StatusOK,
-						Body:       io.NopCloser(bytes.NewReader(createTestZip(t, "1.5.0"))),
+						Body:       io.NopCloser(bytes.NewReader(createTestZip(t, tfVersion))),
 					}, nil
 				})
 
-				installer.EXPECT().Install(gomock.Any(), gomock.Any(), "1.5.0", "").Return("", errors.New("install failed"))
+				installer.EXPECT().Install(gomock.Any(), gomock.Any(), tfVersion, "").Return("", errors.New("install failed"))
 
 				return httpClient, installer
 			},
-			tfVersion:   "1.5.0",
 			wantErr:     true,
 			errContains: "failed to initialize Terraform",
 		},
@@ -90,7 +90,7 @@ func TestNew(t *testing.T) {
 			defer ctrl.Finish()
 
 			tempDir := t.TempDir()
-			httpClient, installer := tt.setupMocks(ctrl, tempDir)
+			httpClient, installer := tt.setupMocks(ctrl, tempDir, tt.tfVersion)
 
 			ctx := context.Background()
 			options := NewTerraformOptions{
