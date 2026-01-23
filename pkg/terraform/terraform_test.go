@@ -50,7 +50,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			name: "download failure",
-			setupMocks: func(ctrl *gomock.Controller, _ string, tfVersion string) (*MockHTTPClient, *MockInstaller) {
+			setupMocks: func(ctrl *gomock.Controller, _ string, _ string) (*MockHTTPClient, *MockInstaller) {
 				httpClient := NewMockHTTPClient(ctrl)
 				installer := NewMockInstaller(ctrl)
 
@@ -678,12 +678,12 @@ func TestExtractStateLockedError(t *testing.T) {
 
 Error message: ConditionalCheckFailedException: The conditional request failed
 Lock Info:
-  ID:        12345678-1234-1234-1234-123456789012
-  Path:      terraform.tfstate
-  Operation: OperationTypeApply
-  Who:       user@host
-  Version:   1.5.0
-  Created:   2023-06-15 10:30:45.123456789 +0000 UTC
+	ID:        12345678-1234-1234-1234-123456789012
+	Path:      terraform.tfstate
+	Operation: OperationTypeApply
+	Who:       user@host
+	Version:   1.5.0
+	Created:   2023-06-15 10:30:45.123456789 +0000 UTC
 `),
 			wantLockInfo: LockErrInfo{
 				ID:        "12345678-1234-1234-1234-123456789012",
