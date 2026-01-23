@@ -66,7 +66,7 @@ type NewTerraformOptions struct {
 	HTTPClient        HTTPClient
 }
 
-// New initilizes a new Terraform.
+// New initializes a new Terraform.
 func New(ctx context.Context, options NewTerraformOptions) (*Terraform, error) {
 	// Set default implementations if not provided
 	tfExecutorFactory := options.TFExecutorFactory
