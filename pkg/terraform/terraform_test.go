@@ -21,12 +21,11 @@ import (
 
 func TestNew(t *testing.T) {
 	tests := []struct {
-		name           string
-		setupMocks     func(ctrl *gomock.Controller, tempDir string) (*MockHTTPClient, *MockInstaller)
-		packageContent []byte
-		tfVersion      string
-		wantErr        bool
-		errContains    string
+		name        string
+		setupMocks  func(ctrl *gomock.Controller, tempDir string) (*MockHTTPClient, *MockInstaller)
+		tfVersion   string
+		wantErr     bool
+		errContains string
 	}{
 		{
 			name: "successful initialization",
