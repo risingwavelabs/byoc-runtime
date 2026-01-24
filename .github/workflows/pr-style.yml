@@ -31,6 +31,9 @@ jobs:
     - uses: actions/setup-go@v6
       with:
         go-version: '1.25'
+    - name: Code Gen Check
+      shell: bash
+      run: make codegen-check
     - name: Mod Tidy Check
       shell: bash
       run: make mod-tidy-check

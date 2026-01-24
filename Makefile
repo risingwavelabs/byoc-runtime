@@ -1,5 +1,8 @@
 # https://github.com/golangci/golangci-lint/releases/latest
 GOLANGCI_LINT_VERSION="2.5.0"
+# https://github.com/uber-go/mock/releases
+MOCK_GEN_VERSION=0.6.0
+CURR_DIR=$(shell pwd)
 
 RED    = \033[0;31m
 GREEN  = \033[0;32m
@@ -47,3 +50,29 @@ mod-tidy: ## Run go mod tidy
 	go mod tidy
 
 mod-tidy-check: mod-tidy check-diff
+
+##@ Mock generation
+
+cleanup-mock: ## Remove mock binary
+	rm -rf ./bin/mockgen
+
+check-mock:
+	@./bin/mockgen --version | grep -qF "$(MOCK_GEN_VERSION)" || { \
+		echo "mockgen not found or version mismatch. Installing..."; \
+		$(MAKE) install-mock; \
+	}
+
+install-mock: ## Install mock tool
+	GOBIN=${CURR_DIR}/bin go install go.uber.org/mock/mockgen@v$(MOCK_GEN_VERSION)
+
+clean-gen-mock: ## Remove generated mock files
+	@rm -f pkg/terraform/mock_gen.go
+
+gen-mock: check-mock clean-gen-mock ## Generate mocks
+	@./bin/mockgen -self_package=github.com/risingwavelabs/byoc-runtime/pkg/terraform -package=terraform -destination=pkg/terraform/mock_gen.go github.com/risingwavelabs/byoc-runtime/pkg/terraform Executor,ExecutorFactory,Installer,HTTPClient
+
+##@ Code generation
+
+codegen: gen-mock ## Run all code generators
+
+codegen-check: codegen check-diff ## Check that generated code is up-to-date
