@@ -188,6 +188,38 @@ func (t *Terraform) ApplyModule(ctx context.Context, moduleOptions ModuleOptions
 	return nil
 }
 
+// InitOptions lists all options for `terraform init` only operation.
+type InitOptions struct {
+	TFInitOptions
+	StdOut io.Writer
+	StdErr io.Writer
+}
+
+// InitModule initializes a Terraform module without applying it.
+// This writes the backend config and variables files, then runs terraform init.
+// Returns the absolute path to the module directory.
+func (t *Terraform) InitModule(ctx context.Context, moduleOptions ModuleOptions, initOptions InitOptions) (string, error) {
+	absModulePath, backendCfgPath, _, cliConfigPath, err := t.setUpModule(moduleOptions)
+	if err != nil {
+		return "", eris.Wrap(err, "error setting up the module")
+	}
+
+	tf, err := t.getTerraformExec(absModulePath)
+	if err != nil {
+		return "", eris.Wrap(err, "failed to create Terraform exec")
+	}
+
+	tf.SetStdout(initOptions.StdOut)
+	tf.SetStderr(initOptions.StdErr)
+
+	err = tfInit(ctx, tf, backendCfgPath, cliConfigPath, initOptions.TFInitOptions)
+	if err != nil {
+		return "", eris.Wrap(err, "failed to init terraform")
+	}
+
+	return absModulePath, nil
+}
+
 // DestroyOptions lists all options for `terraform destroy`.
 type DestroyOptions struct {
 	Retry                  int
