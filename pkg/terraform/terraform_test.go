@@ -654,6 +654,171 @@ func TestRetrieveModuleOutputOrNil(t *testing.T) {
 	}
 }
 
+func TestInitModule(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupMocks  func(ctrl *gomock.Controller) (*MockExecutorFactory, *MockExecutor)
+		initOpts    InitOptions
+		moduleOpts  ModuleOptions
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "successful init",
+			setupMocks: func(ctrl *gomock.Controller) (*MockExecutorFactory, *MockExecutor) {
+				factory := NewMockExecutorFactory(ctrl)
+				executor := NewMockExecutor(ctrl)
+
+				factory.EXPECT().NewTerraform(gomock.Any(), gomock.Any()).Return(executor, nil)
+				executor.EXPECT().SetStdout(gomock.Any())
+				executor.EXPECT().SetStderr(gomock.Any())
+				executor.EXPECT().Init(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
+				return factory, executor
+			},
+			initOpts: InitOptions{
+				TFInitOptions: TFInitOptions{
+					Retry:         1,
+					RetryInterval: time.Millisecond,
+				},
+			},
+			moduleOpts: ModuleOptions{
+				ModulePath:            "test-module",
+				BackendConfigFileName: "backend.tf",
+				BackendConfig:         []byte("backend config"),
+				VariableFileName:      "vars.tfvars",
+				VariablePayload:       []byte("variables"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "init with cli config",
+			setupMocks: func(ctrl *gomock.Controller) (*MockExecutorFactory, *MockExecutor) {
+				factory := NewMockExecutorFactory(ctrl)
+				executor := NewMockExecutor(ctrl)
+
+				factory.EXPECT().NewTerraform(gomock.Any(), gomock.Any()).Return(executor, nil)
+				executor.EXPECT().SetStdout(gomock.Any())
+				executor.EXPECT().SetStderr(gomock.Any())
+				executor.EXPECT().Init(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
+				return factory, executor
+			},
+			initOpts: InitOptions{
+				TFInitOptions: TFInitOptions{
+					Retry:         1,
+					RetryInterval: time.Millisecond,
+				},
+			},
+			moduleOpts: ModuleOptions{
+				ModulePath:            "test-module",
+				BackendConfigFileName: "backend.tf",
+				BackendConfig:         []byte("backend config"),
+				VariableFileName:      "vars.tfvars",
+				VariablePayload:       []byte("variables"),
+				CLIConfigFileName:     "cli.tfrc",
+				CLIConfigPayload:      []byte("cli config"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "terraform executor creation failure",
+			setupMocks: func(ctrl *gomock.Controller) (*MockExecutorFactory, *MockExecutor) {
+				factory := NewMockExecutorFactory(ctrl)
+				executor := NewMockExecutor(ctrl)
+
+				factory.EXPECT().NewTerraform(gomock.Any(), gomock.Any()).Return(nil, errors.New("executor creation failed"))
+
+				return factory, executor
+			},
+			initOpts: InitOptions{},
+			moduleOpts: ModuleOptions{
+				ModulePath:            "test-module",
+				BackendConfigFileName: "backend.tf",
+				BackendConfig:         []byte("backend config"),
+				VariableFileName:      "vars.tfvars",
+				VariablePayload:       []byte("variables"),
+			},
+			wantErr:     true,
+			errContains: "failed to create Terraform exec",
+		},
+		{
+			name: "init failure",
+			setupMocks: func(ctrl *gomock.Controller) (*MockExecutorFactory, *MockExecutor) {
+				factory := NewMockExecutorFactory(ctrl)
+				executor := NewMockExecutor(ctrl)
+
+				factory.EXPECT().NewTerraform(gomock.Any(), gomock.Any()).Return(executor, nil)
+				executor.EXPECT().SetStdout(gomock.Any())
+				executor.EXPECT().SetStderr(gomock.Any())
+				executor.EXPECT().Init(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("init failed"))
+
+				return factory, executor
+			},
+			initOpts: InitOptions{},
+			moduleOpts: ModuleOptions{
+				ModulePath:            "test-module",
+				BackendConfigFileName: "backend.tf",
+				BackendConfig:         []byte("backend config"),
+				VariableFileName:      "vars.tfvars",
+				VariablePayload:       []byte("variables"),
+			},
+			wantErr:     true,
+			errContains: "failed to init terraform",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			tempDir := t.TempDir()
+			modulePath := filepath.Join(tempDir, tt.moduleOpts.ModulePath)
+			err := os.MkdirAll(modulePath, 0750)
+			require.NoError(t, err)
+
+			factory, _ := tt.setupMocks(ctrl)
+
+			tf := &Terraform{
+				rootPath:          tempDir,
+				tfExecutorFactory: factory,
+			}
+
+			ctx := context.Background()
+			absPath, err := tf.InitModule(ctx, tt.moduleOpts, tt.initOpts)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, modulePath, absPath)
+
+			// Verify config files were written
+			backendPath := filepath.Join(modulePath, tt.moduleOpts.BackendConfigFileName)
+			backendContent, err := os.ReadFile(backendPath)
+			require.NoError(t, err)
+			assert.Equal(t, tt.moduleOpts.BackendConfig, backendContent)
+
+			variablePath := filepath.Join(modulePath, tt.moduleOpts.VariableFileName)
+			variableContent, err := os.ReadFile(variablePath)
+			require.NoError(t, err)
+			assert.Equal(t, tt.moduleOpts.VariablePayload, variableContent)
+
+			// Verify CLI config if provided
+			if tt.moduleOpts.CLIConfigFileName != "" {
+				cliConfigPath := filepath.Join(modulePath, tt.moduleOpts.CLIConfigFileName)
+				cliContent, err := os.ReadFile(cliConfigPath)
+				require.NoError(t, err)
+				assert.Equal(t, tt.moduleOpts.CLIConfigPayload, cliContent)
+			}
+		})
+	}
+}
+
 func TestExtractStateLockedError(t *testing.T) {
 	tests := []struct {
 		name         string
