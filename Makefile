@@ -1,5 +1,5 @@
 # https://github.com/golangci/golangci-lint/releases/latest
-GOLANGCI_LINT_VERSION="2.5.0"
+GOLANGCI_LINT_VERSION="2.9.0"
 # https://github.com/uber-go/mock/releases
 MOCK_GEN_VERSION=0.6.0
 CURR_DIR=$(shell pwd)
