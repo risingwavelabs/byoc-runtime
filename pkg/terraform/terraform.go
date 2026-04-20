@@ -429,6 +429,9 @@ func defaultInstallTerraform(ctx context.Context, dir, tfVersion, privateTFBinar
 		Version:    ver,
 		InstallDir: dir,
 		ApiBaseURL: privateTFBinaryBaseURL,
+		// TODO(CLOUD-4790): Remove once hashicorp/hc-install ships a release with the fix
+		// for the expired GPG key (https://github.com/hashicorp/hc-install/issues/370).
+		SkipChecksumVerification: true,
 	}
 
 	execPath, err := installer.Install(ctx)
