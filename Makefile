@@ -1,5 +1,5 @@
 # https://github.com/golangci/golangci-lint/releases/latest
-GOLANGCI_LINT_VERSION="2.9.0"
+GOLANGCI_LINT_VERSION="2.13.1"
 # https://github.com/uber-go/mock/releases
 MOCK_GEN_VERSION=0.6.0
 CURR_DIR=$(shell pwd)
@@ -24,7 +24,7 @@ check-golangci-lint:
 	}
 
 install-golangci-lint: ## install golang lint
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v${GOLANGCI_LINT_VERSION}
+	curl -sSfL https://golangci-lint.run/install.sh | sh -s v${GOLANGCI_LINT_VERSION}
 
 lint: check-golangci-lint ## Run golang lint
 	./bin/golangci-lint run --config .golangci.yaml
