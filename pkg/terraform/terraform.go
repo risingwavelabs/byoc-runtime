@@ -132,6 +132,8 @@ type TFInitOptions struct {
 
 // ApplyOptions lists all options for `terraform apply`.
 type ApplyOptions struct {
+	// Parallelism limits concurrent Terraform resource operations. Zero preserves Terraform's default.
+	Parallelism            int
 	Retry                  int
 	RetryInterval          time.Duration
 	GracefulShutdownPeriod time.Duration
@@ -169,6 +171,9 @@ func (t *Terraform) setUpModule(moduleOptions ModuleOptions) (absModulePath, bac
 
 // ApplyModule applies a Terraform module.
 func (t *Terraform) ApplyModule(ctx context.Context, moduleOptions ModuleOptions, applyOptions ApplyOptions) error {
+	if applyOptions.Parallelism < 0 {
+		return eris.New("parallelism must not be negative")
+	}
 	absModulePath, backendCfgPath, _, cliConfigPath, err := t.setUpModule(moduleOptions)
 	if err != nil {
 		return eris.Wrap(err, "error setting up the module")
@@ -460,6 +465,9 @@ func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backe
 	}
 
 	var tfexecApplyOptions []tfexec.ApplyOption
+	if options.Parallelism > 0 {
+		tfexecApplyOptions = append(tfexecApplyOptions, tfexec.Parallelism(options.Parallelism))
+	}
 	for _, assignment := range toVariableAssignments(sensitiveVariables) {
 		tfexecApplyOptions = append(tfexecApplyOptions, tfexec.Var(assignment))
 	}

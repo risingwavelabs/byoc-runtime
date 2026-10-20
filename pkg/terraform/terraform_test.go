@@ -145,6 +145,61 @@ func TestClean(t *testing.T) {
 	})
 }
 
+func TestApplyModuleParallelism(t *testing.T) {
+	tests := []struct {
+		name        string
+		parallelism int
+		want        int
+		applyErrors []error
+		wantErr     string
+	}{
+		{name: "unspecified preserves existing behavior"},
+		{name: "serial", parallelism: 1, want: 1},
+		{name: "override", parallelism: 5, want: 5},
+		{name: "retry preserves override", parallelism: 3, want: 3, applyErrors: []error{errors.New("transient failure"), nil}},
+		{name: "retry preserves unspecified parallelism", applyErrors: []error{errors.New("transient failure"), nil}},
+		{name: "negative", parallelism: -1, wantErr: "parallelism must not be negative"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			factory := NewMockExecutorFactory(ctrl)
+			executor := NewMockExecutor(ctrl)
+			root := t.TempDir()
+			require.NoError(t, os.Mkdir(filepath.Join(root, "module"), 0o750))
+			if tt.wantErr == "" {
+				factory.EXPECT().NewTerraform(gomock.Any(), gomock.Any()).Return(executor, nil)
+				executor.EXPECT().SetStdout(gomock.Any())
+				executor.EXPECT().SetStderr(gomock.Any())
+				executor.EXPECT().SetWaitDelay(gomock.Any()).Return(nil)
+				executor.EXPECT().Init(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				applyErrors := tt.applyErrors
+				if len(applyErrors) == 0 {
+					applyErrors = []error{nil}
+				}
+				for _, applyErr := range applyErrors {
+					var options []any
+					if tt.want > 0 {
+						options = append(options, tfexec.Parallelism(tt.want))
+					}
+					options = append(options, tfexec.Var("secret=value"))
+					executor.EXPECT().Apply(gomock.Any(), options...).Return(applyErr)
+				}
+			}
+			tf := &Terraform{rootPath: root, tfExecutorFactory: factory}
+			err := tf.ApplyModule(context.Background(), ModuleOptions{
+				ModulePath: "module", BackendConfigFileName: "backend.tf", VariableFileName: "vars.tfvars",
+				SensitiveVariables: map[string]string{"secret": "value"},
+			}, ApplyOptions{Parallelism: tt.parallelism, Retry: max(len(tt.applyErrors)-1, 0), RetryInterval: time.Millisecond})
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestApplyModule(t *testing.T) {
 	tests := []struct {
 		name        string
