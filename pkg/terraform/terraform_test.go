@@ -1099,3 +1099,80 @@ func createTestZip(t *testing.T, tfVersion string) []byte {
 
 	return buf.Bytes()
 }
+
+func TestModuleExecutorOutputMode(t *testing.T) {
+	failure := errors.New("executor failed")
+	tests := []struct {
+		name       string
+		jsonOutput bool
+		execErr    error
+	}{
+		{name: "text success"},
+		{name: "text error", execErr: failure},
+		{name: "JSON success", jsonOutput: true},
+		{name: "JSON error", jsonOutput: true, execErr: failure},
+	}
+	for _, operation := range []string{"apply", "destroy"} {
+		for _, tt := range tests {
+			t.Run(operation+"/"+tt.name, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				factory := NewMockExecutorFactory(ctrl)
+				executor := NewMockExecutor(ctrl)
+				root := t.TempDir()
+				require.NoError(t, os.Mkdir(filepath.Join(root, "module"), 0o750))
+				var stdout bytes.Buffer
+				factory.EXPECT().NewTerraform(gomock.Any(), gomock.Any()).Return(executor, nil)
+				stdoutCalls := 1
+				if tt.jsonOutput {
+					stdoutCalls++
+				}
+				executor.EXPECT().SetStdout(&stdout).Times(stdoutCalls)
+				executor.EXPECT().SetStderr(gomock.Any())
+				executor.EXPECT().SetWaitDelay(gomock.Any()).Return(nil)
+				executor.EXPECT().Init(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				record := "{\"type\":\"apply_complete\",\"@message\":\"done\"}\n"
+				if operation == "apply" {
+					if tt.jsonOutput {
+						executor.EXPECT().ApplyJSON(gomock.Any(), gomock.Any(), tfexec.Var("secret=value")).DoAndReturn(
+							func(_ context.Context, w io.Writer, _ ...tfexec.ApplyOption) error {
+								_, err := io.WriteString(w, record)
+								require.NoError(t, err)
+								return tt.execErr
+							})
+					} else {
+						executor.EXPECT().Apply(gomock.Any(), tfexec.Var("secret=value")).Return(tt.execErr)
+					}
+				} else {
+					if tt.jsonOutput {
+						executor.EXPECT().DestroyJSON(gomock.Any(), gomock.Any(), tfexec.Var("secret=value")).DoAndReturn(
+							func(_ context.Context, w io.Writer, _ ...tfexec.DestroyOption) error {
+								_, err := io.WriteString(w, record)
+								require.NoError(t, err)
+								return tt.execErr
+							})
+					} else {
+						executor.EXPECT().Destroy(gomock.Any(), tfexec.Var("secret=value")).Return(tt.execErr)
+					}
+				}
+				tf := &Terraform{rootPath: root, tfExecutorFactory: factory}
+				moduleOptions := ModuleOptions{ModulePath: "module", BackendConfigFileName: "backend.tf", VariableFileName: "vars.tfvars", SensitiveVariables: map[string]string{"secret": "value"}}
+				var err error
+				if operation == "apply" {
+					err = tf.ApplyModule(context.Background(), moduleOptions, ApplyOptions{JSONOutput: tt.jsonOutput, StdOut: &stdout})
+				} else {
+					err = tf.DestroyModule(context.Background(), moduleOptions, DestroyOptions{JSONOutput: tt.jsonOutput, StdOut: &stdout})
+				}
+				if tt.execErr != nil {
+					require.ErrorIs(t, err, tt.execErr)
+				} else {
+					require.NoError(t, err)
+				}
+				wantOutput := ""
+				if tt.jsonOutput {
+					wantOutput = record
+				}
+				assert.Equal(t, wantOutput, stdout.String())
+			})
+		}
+	}
+}
