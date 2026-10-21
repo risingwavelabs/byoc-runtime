@@ -56,7 +56,7 @@ func TestModuleJSON(t *testing.T) {
 		{name: "explicit concurrency", output: progress, parallelism: 2},
 		{name: "warning remains visible", output: diagnostic("warning", "Deprecated", "Use the new setting"),
 			verbose: true, wantOutput: "{\"terraform_version\":\"1.5.7\"}\ninitialized\n" + diagnostic("warning", "Deprecated", "Use the new setting")},
-		{name: "JSON diagnostics do not rewrite process errors", output: diagnostic("error", "Apply failed", "permission denied"), exit: 1, wantErr: "exit status 1"},
+		{name: "JSON diagnostics accompany process errors", output: diagnostic("error", "Apply failed", "permission denied"), exit: 1, wantErr: "permission denied"},
 		{name: "stderr failure", stderr: "provider crashed", exit: 1, wantErr: "provider crashed"},
 		{name: "expired lock unlocks and retries", output: expired, exit: 1, expiration: time.Minute, retries: 1, wantUnlock: true},
 		{name: "successful command never unlocks", output: expired, expiration: time.Minute},
@@ -81,7 +81,7 @@ func TestModuleJSON(t *testing.T) {
 		{name: "large diagnostic snippet preserves error", output: `{"type":"diagnostic","diagnostic":{"severity":"error","summary":"Invalid manifest","detail":"Schema validation failed","snippet":{"code":"` +
 			strings.Repeat("x", 2<<20) + "\"}}}\n", exit: 1, wantErr: "exit status 1"},
 		{name: "malformed output does not hide later diagnostic", output: "not JSON\n" + diagnostic("error", "Apply failed", "after malformed output"), exit: 1, wantErr: "exit status 1"},
-		{name: "unrelated diagnostics are not retained", output: strings.Repeat(diagnostic("error", "Apply failed", strings.Repeat("detail ", 100)), 200), exit: 1, wantErr: "exit status 1"},
+		{name: "all error diagnostics are retained", output: strings.Repeat(diagnostic("error", "Apply failed", strings.Repeat("detail ", 100)), 200), exit: 1, wantErr: "exit status 1"},
 	}
 	for _, operation := range []string{"apply", "destroy"} {
 		for _, tt := range tests {
@@ -136,8 +136,8 @@ esac
 					require.ErrorContains(t, err, tt.wantErr)
 					var exitErr *exec.ExitError
 					require.True(t, errors.As(err, &exitErr), "retain original process error")
-					if tt.stderr == "" {
-						assert.Equal(t, "code(internal) error applying terraform config: code(internal) failed to apply terraform config\nexit status 1\n", err.Error())
+					if tt.retryOutput != "" {
+						assert.NotContains(t, err.Error(), "stale-lock", "previous attempt diagnostics must not leak into the final error")
 					}
 				}
 				assert.Equal(t, tt.wantOutput, stdout.String())
@@ -162,7 +162,77 @@ esac
 	}
 }
 
+func TestModuleJSONDiagnostics(t *testing.T) {
+	first := `{"type":"diagnostic","@level":"error","diagnostic":{"severity":"error","summary":"Invalid manifest","detail":"Schema validation failed","address":"kubernetes_manifest.example","range":{"filename":"main.tf","start":{"line":7,"column":1,"byte":80},"end":{"line":9,"column":2,"byte":120}},"snippet":{"code":"resource configuration"},"future_field":{"reason":"retained"}}}`
+	second := `{"type":"diagnostic","diagnostic":{"severity":"error","summary":"Access denied","detail":"Missing IAM permission"}}`
+	lock := `{"type":"diagnostic","diagnostic":{"severity":"error","summary":"Error acquiring the state lock","detail":"Lock Info:\n  ID: active-lock\n  Path: bucket/state\n  Operation: OperationTypeApply\n  Who: runner\n  Version: 1.5.7\n  Created: 2000-01-01 00:00:00 +0000 UTC\n"}}`
+	large := `{"type":"diagnostic","diagnostic":{"severity":"error","summary":"Large error","detail":"` + strings.Repeat("detail ", 20000) + `","snippet":{"code":"` + strings.Repeat("source ", 20000) + `"}}}`
+	noise := `{"type":"log","@message":"` + strings.Repeat("progress ", 20000) + `"}` + "\n" + `{"type":"diagnostic","diagnostic":{"severity":"warning","summary":"Deprecated"}}` + "\n"
+	tests := []struct {
+		name   string
+		output string
+		stderr string
+		want   []string
+	}{
+		{name: "complete diagnostics", output: first + "\n" + second + "\n", want: []string{first, second}},
+		{name: "JSON and stderr", output: first + "\n", stderr: "provider stderr", want: []string{first, "provider stderr"}},
+		{name: "diagnostics after lock", output: lock + "\n" + second + "\n", want: []string{lock, second}},
+		{name: "no truncation", output: large + "\n", want: []string{large}},
+		{name: "large progress and warnings", output: noise + first + "\n", want: []string{first}},
+		{name: "unterminated last record", output: first, want: []string{first}},
+		{name: "malformed preceding record", output: "not JSON\n" + first + "\n", want: []string{first}},
+	}
+	for _, operation := range []string{"apply", "destroy"} {
+		for _, tt := range tests {
+			for _, verbose := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/verbose=%t", operation, tt.name, verbose), func(t *testing.T) {
+					root := t.TempDir()
+					require.NoError(t, os.Mkdir(filepath.Join(root, "module"), 0o750))
+					binary := filepath.Join(root, "terraform")
+					require.NoError(t, os.WriteFile(binary, []byte(`#!/bin/sh
+case "$1" in
+version) printf '{"terraform_version":"1.5.7"}\n';;
+init) exit 0;;
+apply|destroy) cat output.json; cat stderr.txt >&2; exit 7;;
+esac
+`), 0o750))
+					require.NoError(t, os.WriteFile(filepath.Join(root, "module", "output.json"), []byte(tt.output), 0o600))
+					require.NoError(t, os.WriteFile(filepath.Join(root, "module", "stderr.txt"), []byte(tt.stderr), 0o600))
+					tf := &Terraform{rootPath: root, tfExecPath: binary, tfExecutorFactory: &defaultExecutorFactory{}}
+					module := ModuleOptions{ModulePath: "module", BackendConfigFileName: "backend.tf", VariableFileName: "vars.tfvars"}
+					var stdout bytes.Buffer
+					var writer io.Writer
+					if verbose {
+						writer = &stdout
+					}
+					var err error
+					if operation == "apply" {
+						err = tf.ApplyModule(context.Background(), module, ApplyOptions{JSONOutput: true, StdOut: writer})
+					} else {
+						err = tf.DestroyModule(context.Background(), module, DestroyOptions{JSONOutput: true, StdOut: writer})
+					}
+					var exitErr *exec.ExitError
+					require.ErrorAs(t, err, &exitErr)
+					assert.Equal(t, 7, exitErr.ExitCode())
+					for _, diagnostic := range tt.want {
+						// A Boolean assertion avoids dumping very large diagnostics on failure.
+						assert.True(t, strings.Contains(err.Error(), diagnostic), "returned error must retain the complete diagnostic")
+					}
+					assert.NotContains(t, err.Error(), "progress ")
+					assert.NotContains(t, err.Error(), "Deprecated")
+					wantOutput := ""
+					if verbose {
+						wantOutput = "{\"terraform_version\":\"1.5.7\"}\n" + tt.output
+					}
+					assert.Equal(t, wantOutput, stdout.String())
+				})
+			}
+		}
+	}
+}
+
 func TestModuleJSONCancellation(t *testing.T) {
+	diagnostic := `{"type":"diagnostic","diagnostic":{"severity":"error","summary":"Provider failed","detail":"Failure before cancellation"}}`
 	for _, operation := range []string{"apply", "destroy"} {
 		t.Run(operation, func(t *testing.T) {
 			root := t.TempDir()
@@ -172,7 +242,7 @@ func TestModuleJSONCancellation(t *testing.T) {
 case "$1" in
 version) printf '{"terraform_version":"1.5.7"}\n';;
 init) exit 0;;
-apply|destroy) touch started; exec sleep 30;;
+apply|destroy) printf '%s\n' '`+diagnostic+`'; touch started; exec sleep 30;;
 esac
 `), 0o750))
 			tf := &Terraform{rootPath: root, tfExecPath: binary, tfExecutorFactory: &defaultExecutorFactory{}}
@@ -195,6 +265,7 @@ esac
 			select {
 			case err := <-done:
 				require.ErrorIs(t, err, context.Canceled)
+				require.ErrorContains(t, err, diagnostic)
 			case <-time.After(5 * time.Second):
 				t.Fatal("apply did not stop after cancellation")
 			}
@@ -295,7 +366,7 @@ esac
 					var exitErr *exec.ExitError
 					require.ErrorAs(t, err, &exitErr)
 					assert.Equal(t, tt.exit, exitErr.ExitCode())
-					assert.NotErrorIs(t, err, writeErr)
+					assert.ErrorIs(t, err, writeErr)
 				} else {
 					require.ErrorIs(t, err, tt.wantErr)
 				}
