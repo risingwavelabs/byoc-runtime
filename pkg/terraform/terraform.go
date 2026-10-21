@@ -132,6 +132,9 @@ type TFInitOptions struct {
 
 // ApplyOptions lists all options for `terraform apply`.
 type ApplyOptions struct {
+	// JSONOutput uses Terraform JSON output, avoiding expensive human-readable diffs.
+	// Raw JSON is forwarded to StdOut. The default is false.
+	JSONOutput bool
 	// Parallelism limits concurrent Terraform resource operations. Zero preserves Terraform's default.
 	Parallelism            int
 	Retry                  int
@@ -227,6 +230,9 @@ func (t *Terraform) InitModule(ctx context.Context, moduleOptions ModuleOptions,
 
 // DestroyOptions lists all options for `terraform destroy`.
 type DestroyOptions struct {
+	// JSONOutput uses Terraform JSON output, avoiding expensive human-readable diffs.
+	// Raw JSON is forwarded to StdOut. The default is false.
+	JSONOutput             bool
 	Retry                  int
 	RetryInterval          time.Duration
 	GracefulShutdownPeriod time.Duration
@@ -473,9 +479,24 @@ func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backe
 	}
 
 	apply := func(ctx context.Context) error {
-		applyErr := tf.Apply(ctx, tfexecApplyOptions...)
-		lockErrInfo, ok := extractStateLockedError(applyErr)
-		if options.LockExpirationDuration == 0 || !ok || time.Since(lockErrInfo.Created) < options.LockExpirationDuration {
+		var applyErr error
+		var lockErrInfo LockErrInfo
+		var locked bool
+		if options.JSONOutput {
+			lockDetector := &jsonStateLockDetector{stdout: options.StdOut}
+			applyErr = tf.ApplyJSON(ctx, lockDetector, tfexecApplyOptions...)
+			lockDetector.flush()
+			lockErrInfo, locked = lockDetector.info, lockDetector.found && applyErr != nil
+			if applyErr == nil {
+				applyErr = lockDetector.writeErr
+			}
+			// ApplyJSON replaces stdout; restore it before force-unlock or retries.
+			tf.SetStdout(options.StdOut)
+		} else {
+			applyErr = tf.Apply(ctx, tfexecApplyOptions...)
+			lockErrInfo, locked = extractStateLockedError(applyErr)
+		}
+		if applyErr == nil || options.LockExpirationDuration == 0 || !locked || time.Since(lockErrInfo.Created) < options.LockExpirationDuration {
 			return applyErr
 		}
 		unlockErr := tf.ForceUnlock(ctx, lockErrInfo.ID)
@@ -511,9 +532,24 @@ func (t *Terraform) terraformInitAndDestroy(ctx context.Context, workingDir, bac
 	}
 
 	destroy := func(ctx context.Context) error {
-		destroyErr := tf.Destroy(ctx, tfexecDestroyOptions...)
-		lockErrInfo, ok := extractStateLockedError(destroyErr)
-		if options.LockExpirationDuration == 0 || !ok || time.Since(lockErrInfo.Created) < options.LockExpirationDuration {
+		var destroyErr error
+		var lockErrInfo LockErrInfo
+		var locked bool
+		if options.JSONOutput {
+			lockDetector := &jsonStateLockDetector{stdout: options.StdOut}
+			destroyErr = tf.DestroyJSON(ctx, lockDetector, tfexecDestroyOptions...)
+			lockDetector.flush()
+			lockErrInfo, locked = lockDetector.info, lockDetector.found && destroyErr != nil
+			if destroyErr == nil {
+				destroyErr = lockDetector.writeErr
+			}
+			// DestroyJSON replaces stdout; restore it before force-unlock or retries.
+			tf.SetStdout(options.StdOut)
+		} else {
+			destroyErr = tf.Destroy(ctx, tfexecDestroyOptions...)
+			lockErrInfo, locked = extractStateLockedError(destroyErr)
+		}
+		if destroyErr == nil || options.LockExpirationDuration == 0 || !locked || time.Since(lockErrInfo.Created) < options.LockExpirationDuration {
 			return destroyErr
 		}
 		unlockErr := tf.ForceUnlock(ctx, lockErrInfo.ID)
@@ -586,7 +622,11 @@ func extractStateLockedError(err error) (LockErrInfo, bool) {
 	if !stateLockErrRegexp.MatchString(err.Error()) {
 		return LockErrInfo{}, false
 	}
-	submatches := stateLockInfoRegexp.FindStringSubmatch(err.Error())
+	return parseStateLockInfo(err.Error())
+}
+
+func parseStateLockInfo(detail string) (LockErrInfo, bool) {
+	submatches := stateLockInfoRegexp.FindStringSubmatch(detail)
 	if len(submatches) == 7 {
 		created, err := time.Parse(lockCreatedLayout, submatches[6])
 		if err != nil {

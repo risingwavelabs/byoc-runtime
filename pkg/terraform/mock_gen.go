@@ -63,6 +63,25 @@ func (mr *MockExecutorMockRecorder) Apply(ctx any, opts ...any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Apply", reflect.TypeOf((*MockExecutor)(nil).Apply), varargs...)
 }
 
+// ApplyJSON mocks base method.
+func (m *MockExecutor) ApplyJSON(ctx context.Context, w io.Writer, opts ...tfexec.ApplyOption) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, w}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ApplyJSON", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyJSON indicates an expected call of ApplyJSON.
+func (mr *MockExecutorMockRecorder) ApplyJSON(ctx, w any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, w}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyJSON", reflect.TypeOf((*MockExecutor)(nil).ApplyJSON), varargs...)
+}
+
 // Destroy mocks base method.
 func (m *MockExecutor) Destroy(ctx context.Context, opts ...tfexec.DestroyOption) error {
 	m.ctrl.T.Helper()
@@ -80,6 +99,25 @@ func (mr *MockExecutorMockRecorder) Destroy(ctx any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Destroy", reflect.TypeOf((*MockExecutor)(nil).Destroy), varargs...)
+}
+
+// DestroyJSON mocks base method.
+func (m *MockExecutor) DestroyJSON(ctx context.Context, w io.Writer, opts ...tfexec.DestroyOption) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, w}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DestroyJSON", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DestroyJSON indicates an expected call of DestroyJSON.
+func (mr *MockExecutorMockRecorder) DestroyJSON(ctx, w any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, w}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DestroyJSON", reflect.TypeOf((*MockExecutor)(nil).DestroyJSON), varargs...)
 }
 
 // ForceUnlock mocks base method.

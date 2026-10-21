@@ -15,7 +15,9 @@ import (
 type Executor interface {
 	Init(ctx context.Context, opts ...tfexec.InitOption) error
 	Apply(ctx context.Context, opts ...tfexec.ApplyOption) error
+	ApplyJSON(ctx context.Context, w io.Writer, opts ...tfexec.ApplyOption) error
 	Destroy(ctx context.Context, opts ...tfexec.DestroyOption) error
+	DestroyJSON(ctx context.Context, w io.Writer, opts ...tfexec.DestroyOption) error
 	Output(ctx context.Context, opts ...tfexec.OutputOption) (map[string]tfexec.OutputMeta, error)
 	ForceUnlock(ctx context.Context, lockID string, opts ...tfexec.ForceUnlockOption) error
 	SetStdout(w io.Writer)
