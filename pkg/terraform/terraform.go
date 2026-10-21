@@ -483,13 +483,11 @@ func (t *Terraform) terraformInitAndApply(ctx context.Context, workingDir, backe
 		var lockErrInfo LockErrInfo
 		var locked bool
 		if options.JSONOutput {
-			lockDetector := &jsonStateLockDetector{stdout: options.StdOut}
-			applyErr = tf.ApplyJSON(ctx, lockDetector, tfexecApplyOptions...)
-			lockDetector.flush()
-			lockErrInfo, locked = lockDetector.info, lockDetector.found && applyErr != nil
-			if applyErr == nil {
-				applyErr = lockDetector.writeErr
-			}
+			output := &jsonOutput{stdout: options.StdOut}
+			applyErr = tf.ApplyJSON(ctx, output, tfexecApplyOptions...)
+			output.flush()
+			lockErrInfo, locked = output.info, output.found && applyErr != nil
+			applyErr = output.result(applyErr)
 			// ApplyJSON replaces stdout; restore it before force-unlock or retries.
 			tf.SetStdout(options.StdOut)
 		} else {
@@ -536,13 +534,11 @@ func (t *Terraform) terraformInitAndDestroy(ctx context.Context, workingDir, bac
 		var lockErrInfo LockErrInfo
 		var locked bool
 		if options.JSONOutput {
-			lockDetector := &jsonStateLockDetector{stdout: options.StdOut}
-			destroyErr = tf.DestroyJSON(ctx, lockDetector, tfexecDestroyOptions...)
-			lockDetector.flush()
-			lockErrInfo, locked = lockDetector.info, lockDetector.found && destroyErr != nil
-			if destroyErr == nil {
-				destroyErr = lockDetector.writeErr
-			}
+			output := &jsonOutput{stdout: options.StdOut}
+			destroyErr = tf.DestroyJSON(ctx, output, tfexecDestroyOptions...)
+			output.flush()
+			lockErrInfo, locked = output.info, output.found && destroyErr != nil
+			destroyErr = output.result(destroyErr)
 			// DestroyJSON replaces stdout; restore it before force-unlock or retries.
 			tf.SetStdout(options.StdOut)
 		} else {

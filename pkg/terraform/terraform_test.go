@@ -1131,12 +1131,17 @@ func TestModuleExecutorOutputMode(t *testing.T) {
 				executor.EXPECT().SetWaitDelay(gomock.Any()).Return(nil)
 				executor.EXPECT().Init(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				record := "{\"type\":\"apply_complete\",\"@message\":\"done\"}\n"
+				if tt.execErr != nil {
+					record = `{"type":"diagnostic","diagnostic":{"severity":"error","summary":"Apply failed","detail":"permission denied"}}`
+				}
 				if operation == "apply" {
 					if tt.jsonOutput {
 						executor.EXPECT().ApplyJSON(gomock.Any(), gomock.Any(), tfexec.Var("secret=value")).DoAndReturn(
 							func(_ context.Context, w io.Writer, _ ...tfexec.ApplyOption) error {
-								_, err := io.WriteString(w, record)
-								require.NoError(t, err)
+								for _, chunk := range []string{record[:10], record[10:]} {
+									_, err := io.WriteString(w, chunk)
+									require.NoError(t, err)
+								}
 								return tt.execErr
 							})
 					} else {
@@ -1146,8 +1151,10 @@ func TestModuleExecutorOutputMode(t *testing.T) {
 					if tt.jsonOutput {
 						executor.EXPECT().DestroyJSON(gomock.Any(), gomock.Any(), tfexec.Var("secret=value")).DoAndReturn(
 							func(_ context.Context, w io.Writer, _ ...tfexec.DestroyOption) error {
-								_, err := io.WriteString(w, record)
-								require.NoError(t, err)
+								for _, chunk := range []string{record[:10], record[10:]} {
+									_, err := io.WriteString(w, chunk)
+									require.NoError(t, err)
+								}
 								return tt.execErr
 							})
 					} else {
@@ -1164,6 +1171,9 @@ func TestModuleExecutorOutputMode(t *testing.T) {
 				}
 				if tt.execErr != nil {
 					require.ErrorIs(t, err, tt.execErr)
+					if tt.jsonOutput {
+						require.ErrorContains(t, err, record)
+					}
 				} else {
 					require.NoError(t, err)
 				}
