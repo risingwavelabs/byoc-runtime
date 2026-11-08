@@ -6,7 +6,7 @@ require (
 	github.com/hashicorp/go-version v1.9.0
 	github.com/hashicorp/hc-install v0.10.0
 	github.com/hashicorp/hcl/v2 v2.25.0
-	github.com/hashicorp/terraform-exec v0.25.3
+	github.com/hashicorp/terraform-exec v0.26.0
 	github.com/risingwavelabs/eris v1.3.1
 	github.com/stretchr/testify v1.12.1
 	github.com/zclconf/go-cty v1.19.0
@@ -22,7 +22,7 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
-	github.com/hashicorp/terraform-json v0.28.0 // indirect
+	github.com/hashicorp/terraform-json v0.29.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.56.0 // indirect
