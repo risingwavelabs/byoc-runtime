@@ -9,7 +9,7 @@ require (
 	github.com/hashicorp/terraform-exec v0.26.0
 	github.com/risingwavelabs/eris v1.3.1
 	github.com/stretchr/testify v1.12.1
-	github.com/zclconf/go-cty v1.19.0
+	github.com/zclconf/go-cty v1.20.0
 	go.uber.org/mock v0.6.0
 )
 
